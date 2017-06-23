@@ -32,6 +32,24 @@ impl<K: Ord, V> Node<K, V> {
             node.as_mut().unwrap().add_child(key, val);
         }
     }
+
+    fn fold<B, F>(&self, init: B, f: F) -> B 
+        where F: Fn(B, &Self) -> B, 
+    {
+        let mut accum = init;
+        if let Some(ref node) = self.left {
+            accum = f(accum, node.as_ref());
+        }
+        if let Some(ref node) = self.right {
+            accum = f(accum, node.as_ref());
+        }
+
+        accum
+    }
+    
+    fn len(&self) -> usize {
+        self.fold(1, |b, n| { b + n.len() })
+    }
 }
 
 #[derive(Debug)]
@@ -49,7 +67,11 @@ impl<K: Ord, V> Tree<K, V> {
     }
 
     pub fn len(&self) -> usize {
-        0
+        if let Some(ref node) = self.root {
+            node.len()
+        } else {
+            0
+        }
     }
 
     pub fn find(&self, key: K) -> Option<&V> {
@@ -71,7 +93,9 @@ mod tests {
     fn insert_basic() {
         let mut t = Tree::new();
         t.insert("hi", 123);
-        assert_eq!(1, t.len());
+        t.insert("woo", 123);
+        t.insert("moo", 123);
+        assert_eq!(3, t.len());
     }
     
     #[test]
