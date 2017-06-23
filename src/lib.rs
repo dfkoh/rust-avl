@@ -15,19 +15,22 @@ struct Tree<T: Ord> {
 
 struct TreeIter<'a, T: 'a + Ord> {
     tree: &'a Tree<T>,
-    curr_node: Option<&'a Node<T>>,
+    queue: Vec<&'a T>,
 }
 
 impl<'a, T: Ord> TreeIter<'a, T> {
     fn new(tree: &'a Tree<T>) -> TreeIter<T> {
-        TreeIter { tree: &tree, curr_node: None }
+        TreeIter { tree: &tree, queue: Vec::new() }
     }
 }
 
 impl<'a, T: Ord> Iterator for TreeIter<'a, T> {
-    type Item = T;
+    type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
-        None
+        match self.tree.root {
+            None => None,
+            Some(ref node) => Some(&node.value),
+        }
     }
 }
 
@@ -49,9 +52,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn iter_basic() {
+        let t: Tree<u32> = Tree::new();
+        assert_eq!(None, t.iter().next());
+    }
+
+    #[test]
     fn insert_basic() {
         let mut t = Tree::new();
         t.insert(123);
-        assert_eq!(123, t.iter().next().unwrap()) 
+        assert_eq!(123, *t.iter().next().unwrap());
     }
 }
