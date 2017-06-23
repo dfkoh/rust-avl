@@ -50,11 +50,39 @@ impl<K: Ord, V> Node<K, V> {
     fn len(&self) -> usize {
         self.fold(1, |b, n| { b + n.len() })
     }
+
+    fn find(&self, key: K) -> Option<&V> {
+        if key == self.key {
+            return Some(&self.value);
+        }
+
+        if key < self.key && self.left.is_some() {
+            return self.left.as_ref().and_then(|n| n.find(key));
+        }
+
+        if key > self.key && self.right.is_some() {
+            return self.right.as_ref().and_then(|n| n.find(key));
+        }
+
+        return None;
+    }
 }
 
 #[derive(Debug)]
 pub struct Tree<K: Ord, V> {
     root: Option<Box<Node<K, V>>>,
+}
+
+macro_rules! tree_fn {
+    ($func_name:ident($($arg:ident: $arg_type:ty),*) -> $return_type:ty, $default:expr) => {
+        pub fn $func_name(&self, $($arg: $arg_type),*) -> $return_type {
+            if let Some(ref node) = self.root {
+                node.$func_name($($arg),*)
+            } else {
+                $default
+            }
+        }
+    }
 }
 
 impl<K: Ord, V> Tree<K, V> {
@@ -66,17 +94,12 @@ impl<K: Ord, V> Tree<K, V> {
         Node::insert(&mut self.root, key, val);
     }
 
-    pub fn len(&self) -> usize {
-        if let Some(ref node) = self.root {
-            node.len()
-        } else {
-            0
-        }
-    }
+    tree_fn!(len() -> usize, 0);
+    tree_fn!(find(key: K) -> Option<&V>, None);
 
-    pub fn find(&self, key: K) -> Option<&V> {
-        None
-    }
+    //pub fn find(&self, key: K) -> Option<&V> {
+    //    None
+    //}
 }
 
 #[cfg(test)]
@@ -102,7 +125,10 @@ mod tests {
     fn find_basic() {
         let mut t = Tree::new();
         t.insert("hi", 123);
-        assert_eq!(123, *t.find("hi").expect("find failed"));
+        t.insert("woo", 124);
+        t.insert("moo", 125);
+
+        assert_eq!(125, *t.find("moo").expect("find failed"));
     }
 
 }
