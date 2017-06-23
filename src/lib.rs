@@ -3,92 +3,57 @@ use std::cell::RefCell;
 
 
 #[derive(Debug)]
-struct Node<T: Ord> {
-    value: Rc<T>,
-    left: Option<NodePtr<T>>,
-    right: Option<NodePtr<T>>,
+struct Node<K: Ord, V> {
+    key: K,
+    value: V,
+    left: Option<Box<Node<K, V>>>,
+    right: Option<Box<Node<K, V>>>,
     balance: u8,
 }
 
-type NodePtr<T> = Rc<RefCell<Node<T>>>;
 
-impl<T: Ord> Node<T> {
-    fn new(val: T) -> Node<T> {
-        Node { value: Rc::new(val), left: None, right: None, balance: 0 }
+impl<K: Ord, V> Node<K, V> {
+    fn new(key: K, val: V) -> Node<K, V> {
+        Node { key: key, value: val, left: None, right: None, balance: 0 }
     }
 
-    fn add_child(&mut self, val: T) {
-        let child = if val < *self.value {
-            &mut self.left  
+    fn add_child(&mut self, key: K, val: V) {
+        let child = if key < self.key {
+            Node::insert(&mut self.left, key, val);
         } else {
-            &mut self.right
+            Node::insert(&mut self.right, key, val);
         };
+    }
 
-        match child {
-            &mut None => { *child = Some(Rc::new(RefCell::new(Node::new(val)))) },
-            &mut Some(ref node) => { node.borrow_mut().add_child(val); },
+    fn insert(node: &mut Option<Box<Node<K, V>>>, key: K, val: V) {
+        if node.is_none() {
+            *node = Some(Box::new(Node::new(key, val)))
+        } else {
+            node.as_mut().unwrap().add_child(key, val);
         }
     }
 }
 
 #[derive(Debug)]
-pub struct Tree<T: Ord> {
-    root: Option<NodePtr<T>>,
+pub struct Tree<K: Ord, V> {
+    root: Option<Box<Node<K, V>>>,
 }
 
-
-pub struct TreeIter<T: Ord> {
-    queue: Vec<Weak<RefCell<Node<T>>>>,
-}
-
-impl<T: Ord> TreeIter<T> {
-    fn add_subtree(&mut self, root: Option<NodePtr<T>>) {
-        let mut node_opt = root;
-        while node_opt.is_some() {
-            let node = node_opt.unwrap();
-            self.queue.push(Rc::downgrade(&node));
-            node_opt = node.borrow().left.clone();
-        }
-    }
-
-    fn new(tree: &Tree<T>) -> TreeIter<T> {
-        let mut iter = TreeIter { queue: Vec::new() };
-        iter.add_subtree(tree.root.clone());
-        iter
-    }
-}
-
-impl<T: Ord> Iterator for TreeIter<T> {
-    type Item = Rc<T>;
-    fn next(&mut self) -> Option<Self::Item> {
-        let node_weak = self.queue.pop();
-        if node_weak.is_none() { return None; }
-
-        match node_weak.unwrap().upgrade() {
-            None => None,
-            Some(node) => {
-                self.add_subtree(node.borrow().right.clone());
-                Some(node.borrow().value.clone())
-            }
-        }
-    }
-}
-
-impl<T: Ord> Tree<T> {
-    pub fn new() -> Tree<T> {
+impl<K: Ord, V> Tree<K, V> {
+    pub fn new() -> Tree<K, V> {
         Tree { root: None }
     }
     
-    pub fn insert(&mut self, val: T) {
-        if let Some(ref node) = self.root {
-            node.borrow_mut().add_child(val);
-        } else {
-            self.root = Some(Rc::new(RefCell::new(Node::new(val))));
-        }
+    pub fn insert(&mut self, key: K, val: V) {
+        Node::insert(&mut self.root, key, val);
     }
 
-    pub fn iter(&self) -> TreeIter<T>{
-        TreeIter::new(self)
+    pub fn len(&self) -> usize {
+        0
+    }
+
+    pub fn find(&self, key: K) -> Option<&V> {
+        None
     }
 }
 
@@ -97,27 +62,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn iter_basic() {
-        let t: Tree<u32> = Tree::new();
-        assert_eq!(None, t.iter().next());
+    fn len_basic() {
+        let t: Tree<&str, u32> = Tree::new();
+        assert_eq!(0, t.len());
     }
 
     #[test]
     fn insert_basic() {
         let mut t = Tree::new();
-        t.insert(123);
-        assert_eq!(123, *t.iter().next().expect("iter ended early"));
+        t.insert("hi", 123);
+        assert_eq!(1, t.len());
     }
     
     #[test]
-    fn insert_two() {
+    fn find_basic() {
         let mut t = Tree::new();
-        t.insert(123);
-        t.insert(345);
-        let mut itr = t.iter();
-        println!("{:?}", t);
-        assert_eq!(123, *itr.next().expect("iter ended early"));
-        assert_eq!(345, *itr.next().expect("iter ended early"));
+        t.insert("hi", 123);
+        assert_eq!(123, *t.find("hi").expect("find failed"));
     }
 
 }
