@@ -1,5 +1,6 @@
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
+use std::cmp;
 
 
 #[derive(Debug)]
@@ -49,6 +50,10 @@ impl<K: Ord, V> Node<K, V> {
     
     fn len(&self) -> usize {
         self.fold(1, |b, n| { b + n.len() })
+    }
+
+    fn height(&self) -> usize {
+        self.fold(1, |b, n| { cmp::max(b, n.height() + 1) })
     }
 
     fn find(&self, key: K) -> Option<&V> {
@@ -106,29 +111,52 @@ impl<K: Ord, V> Tree<K, V> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn len_basic() {
-        let t: Tree<&str, u32> = Tree::new();
-        assert_eq!(0, t.len());
+    mod node {
+        use super::Node;
+        #[test]
+        fn height() {
+            let mut n = Node::new('b', 1);
+            n.left = Some(Box::new(Node::new('a', 2)));
+            n.right = Some(Box::new(Node::new('d', 3)));
+            {
+                let m = n.right.as_mut().unwrap();
+                m.left = Some(Box::new(Node::new('c', 4)));
+                m.right = Some(Box::new(Node::new('e', 5)));
+            }
+            let m = n.right.as_ref().unwrap();
+            let k = n.left.as_ref().unwrap();
+            assert_eq!(3, n.height());
+            assert_eq!(2, m.height());
+            assert_eq!(1, k.height());
+        }
     }
 
-    #[test]
-    fn insert_basic() {
-        let mut t = Tree::new();
-        t.insert("hi", 123);
-        t.insert("woo", 123);
-        t.insert("moo", 123);
-        assert_eq!(3, t.len());
-    }
-    
-    #[test]
-    fn find_basic() {
-        let mut t = Tree::new();
-        t.insert("hi", 123);
-        t.insert("woo", 124);
-        t.insert("moo", 125);
+    mod tree {
+        use super::Tree;
+        #[test]
+        fn len_basic() {
+            let t: Tree<&str, u32> = Tree::new();
+            assert_eq!(0, t.len());
+        }
 
-        assert_eq!(125, *t.find("moo").expect("find failed"));
+        #[test]
+        fn insert_basic() {
+            let mut t = Tree::new();
+            t.insert("hi", 123);
+            t.insert("woo", 123);
+            t.insert("moo", 123);
+            assert_eq!(3, t.len());
+        }
+        
+        #[test]
+        fn find_basic() {
+            let mut t = Tree::new();
+            t.insert("hi", 123);
+            t.insert("woo", 124);
+            t.insert("moo", 125);
+
+            assert_eq!(125, *t.find("moo").expect("find failed"));
+        }
     }
 
 }
