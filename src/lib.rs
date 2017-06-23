@@ -7,13 +7,19 @@ struct Node<T: Ord> {
     balance: u8,
 }
 
+impl<T: Ord> Node<T> {
+    fn new(val: T) -> Node<T> {
+        Node { value: val, left: None, right: None, balance: 0 }
+    }
+}
+
 #[derive(Debug)]
-struct Tree<T: Ord> {
+pub struct Tree<T: Ord> {
     root: Option<Box<Node<T>>>,
 }
 
 
-struct TreeIter<'a, T: 'a + Ord> {
+pub struct TreeIter<'a, T: 'a + Ord> {
     tree: &'a Tree<T>,
     queue: Vec<&'a T>,
 }
@@ -35,14 +41,15 @@ impl<'a, T: Ord> Iterator for TreeIter<'a, T> {
 }
 
 impl<T: Ord> Tree<T> {
-    fn new() -> Tree<T> {
+    pub fn new() -> Tree<T> {
         Tree { root: None }
     }
     
-    fn insert(&mut self, val: T) {
+    pub fn insert(&mut self, val: T) {
+        self.root = Some(Box::new(Node::new(val)))
     }
 
-    fn iter(&self) -> TreeIter<T>{
+    pub fn iter(&self) -> TreeIter<T>{
         TreeIter::new(self)
     }
 }
@@ -61,6 +68,17 @@ mod tests {
     fn insert_basic() {
         let mut t = Tree::new();
         t.insert(123);
-        assert_eq!(123, *t.iter().next().unwrap());
+        assert_eq!(123, *t.iter().next().expect("iter ended early"));
     }
+    
+    #[test]
+    fn insert_two() {
+        let mut t = Tree::new();
+        t.insert(123);
+        t.insert(345);
+        let mut itr = t.iter();
+        assert_eq!(123, *itr.next().expect("iter ended early"));
+        assert_eq!(345, *itr.next().expect("iter ended early"));
+    }
+
 }
