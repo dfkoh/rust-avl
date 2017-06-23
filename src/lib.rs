@@ -2,15 +2,21 @@ use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use std::cmp;
 
-
 #[derive(Debug)]
 struct Node<K: Ord, V> {
     key: K,
     value: V,
     left: Option<Box<Node<K, V>>>,
     right: Option<Box<Node<K, V>>>,
-    balance: u8,
+    balance: i8,
 }
+
+impl<K: Ord, V: Eq> PartialEq for Node<K, V> {
+    fn eq(&self, other: &Node<K, V>) -> bool {
+        return self.key == other.key && self.value == other.value;
+    }
+}
+impl<K: Ord, V: Eq> Eq for Node<K, V> {}
 
 
 impl<K: Ord, V> Node<K, V> {
@@ -18,19 +24,34 @@ impl<K: Ord, V> Node<K, V> {
         Node { key: key, value: val, left: None, right: None, balance: 0 }
     }
 
-    fn add_child(&mut self, key: K, val: V) {
-        let child = if key < self.key {
-            Node::insert(&mut self.left, key, val);
+    // Returns whether or not this tree got taller
+    fn add_child(&mut self, key: K, val: V) -> bool {
+        let mut grew_left = false;
+        let mut grew_right = false;
+        if key < self.key {
+            grew_left = Node::insert(&mut self.left, key, val);
         } else {
-            Node::insert(&mut self.right, key, val);
-        };
+            grew_right = Node::insert(&mut self.right, key, val);
+        }
+
+        if grew_left {
+            self.balance -= 1;
+            return self.balance < 0;
+        } 
+        else if grew_right {
+            self.balance += 1;
+            return self.balance > 0;
+        }
+        false
     }
 
-    fn insert(node: &mut Option<Box<Node<K, V>>>, key: K, val: V) {
+    // Returns whether or not the node got taller
+    fn insert(node: &mut Option<Box<Node<K, V>>>, key: K, val: V) -> bool {
         if node.is_none() {
-            *node = Some(Box::new(Node::new(key, val)))
+            *node = Some(Box::new(Node::new(key, val)));
+            true
         } else {
-            node.as_mut().unwrap().add_child(key, val);
+            node.as_mut().unwrap().add_child(key, val)
         }
     }
 
@@ -113,22 +134,35 @@ mod tests {
 
     mod node {
         use super::Node;
+
+        fn build_tree() -> Node<char, u32> {
+            let mut n = Node::new('b', 1);
+            n.add_child('a', 2);
+            n.add_child('d', 3);
+            n.add_child('c', 4);
+            n.add_child('e', 5);
+            n
+        }
+
         #[test]
         fn height() {
-            let mut n = Node::new('b', 1);
-            n.left = Some(Box::new(Node::new('a', 2)));
-            n.right = Some(Box::new(Node::new('d', 3)));
-            {
-                let m = n.right.as_mut().unwrap();
-                m.left = Some(Box::new(Node::new('c', 4)));
-                m.right = Some(Box::new(Node::new('e', 5)));
-            }
+            let n = build_tree();
             let m = n.right.as_ref().unwrap();
             let k = n.left.as_ref().unwrap();
             assert_eq!(3, n.height());
             assert_eq!(2, m.height());
             assert_eq!(1, k.height());
         }
+
+        #[test]
+        fn balance() {
+            let n = build_tree();
+            let m = n.right.as_ref().unwrap();
+            let k = n.left.as_ref().unwrap();
+            let delta: i8 = (m.height() - k.height()) as i8;
+            assert_eq!(n.balance, delta);
+        }
+
     }
 
     mod tree {
