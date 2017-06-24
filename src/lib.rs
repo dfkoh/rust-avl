@@ -1,5 +1,3 @@
-use std::rc::{Rc, Weak};
-use std::cell::RefCell;
 use std::cmp;
 
 #[derive(Debug)]
@@ -68,6 +66,7 @@ impl<K: Ord, V> Node<K, V> {
 
         accum
     }
+
     
     fn len(&self) -> usize {
         self.fold(1, |b, n| { b + n.len() })
@@ -122,10 +121,6 @@ impl<K: Ord, V> Tree<K, V> {
 
     tree_fn!(len() -> usize, 0);
     tree_fn!(find(key: K) -> Option<&V>, None);
-
-    //pub fn find(&self, key: K) -> Option<&V> {
-    //    None
-    //}
 }
 
 #[cfg(test)]
