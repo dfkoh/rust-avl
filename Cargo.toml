@@ -2,5 +2,7 @@
 name = "avl"
 version = "0.1.0"
 authors = ["David Koh <david.f.koh@gmail.com>"]
+publish = false
 
 [dependencies]
+rand = "^0.3"

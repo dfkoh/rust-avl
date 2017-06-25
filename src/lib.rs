@@ -1,7 +1,13 @@
+#![feature(test)]
+
+extern crate test;
+extern crate rand;
+
 use std::cmp;
+use std::mem;
 
 #[derive(Debug)]
-struct Node<K: Ord, V> {
+struct Node<K: Ord, V: PartialEq> {
     key: K,
     value: V,
     left: Option<Box<Node<K, V>>>,
@@ -9,7 +15,7 @@ struct Node<K: Ord, V> {
     balance: i8,
 }
 
-impl<K: Ord, V: Eq> PartialEq for Node<K, V> {
+impl<K: Ord, V: PartialEq> PartialEq for Node<K, V> {
     fn eq(&self, other: &Node<K, V>) -> bool {
         return self.key == other.key && self.value == other.value;
     }
@@ -17,40 +23,177 @@ impl<K: Ord, V: Eq> PartialEq for Node<K, V> {
 impl<K: Ord, V: Eq> Eq for Node<K, V> {}
 
 
-impl<K: Ord, V> Node<K, V> {
+impl<K: Ord, V: PartialEq> Node<K, V> {
     fn new(key: K, val: V) -> Node<K, V> {
         Node { key: key, value: val, left: None, right: None, balance: 0 }
     }
 
-    // Returns whether or not this tree got taller
-    fn add_child(&mut self, key: K, val: V) -> bool {
-        let mut grew_left = false;
-        let mut grew_right = false;
-        if key < self.key {
-            grew_left = Node::insert(&mut self.left, key, val);
-        } else {
-            grew_right = Node::insert(&mut self.right, key, val);
+    // Return the new root ptr, and if the tree got taller
+    fn insert(mut node_ptr: Option<Box<Node<K, V>>>, 
+                 key: K, val: V) -> (Option<Box<Node<K, V>>>, bool) 
+    {
+        if node_ptr.is_none() {
+            return (Some(Box::new(Node::new(key, val))), true);
         }
 
-        if grew_left {
-            self.balance -= 1;
-            return self.balance < 0;
-        } 
-        else if grew_right {
-            self.balance += 1;
-            return self.balance > 0;
+        let mut grew = false;
+        let mut change = 0;
+        {
+            let node = node_ptr.as_mut().unwrap();
+            if key == node.key {
+                node.value = val;
+            }
+            else if key < node.key {
+                let left = mem::replace(&mut node.left, None);
+                let (lnode, lgrew) = Node::insert(left, key, val);
+                grew = lgrew;
+                mem::replace(&mut node.left, lnode);
+                change = -1;
+            } 
+            else {
+                let right = mem::replace(&mut node.right, None);
+                let (rnode, rgrew) = Node::insert(right, key, val);
+                grew = rgrew;
+                mem::replace(&mut node.right, rnode);
+                change = 1;
+            }
         }
-        false
+
+        if !grew {
+            // No need to balance if the sub-tree didn't get taller
+            //assert_eq!(Ok(()), node_ptr.as_ref().unwrap()._check_invariants());
+            (node_ptr, false)
+        } else {
+            let (new_node, grew) = Node::balance(node_ptr.unwrap(), change);
+            //assert_eq!(Ok(()), new_node._check_invariants());
+            (Some(new_node), grew)
+        }
     }
 
-    // Returns whether or not the node got taller
-    fn insert(node: &mut Option<Box<Node<K, V>>>, key: K, val: V) -> bool {
-        if node.is_none() {
-            *node = Some(Box::new(Node::new(key, val)));
-            true
-        } else {
-            node.as_mut().unwrap().add_child(key, val)
-        }
+    fn balance(mut node: Box<Node<K, V>>, change: i8)
+        -> (Box<Node<K, V>>, bool) 
+    {
+        // Record the old balance so we can tell if we get taller
+        let old_balance = node.balance;
+        node.balance += change;
+
+        // Balance a lean too far to the right
+        if node.balance > 1 { 
+            if node.right.as_ref().unwrap().balance < 0 {
+                let mut right = mem::replace(&mut node.right, None).unwrap();
+                right = Node::rotate_right(right);
+                mem::replace(&mut node.right, Some(right));
+            } 
+            node = Node::rotate_left(node);
+        } 
+        // Balance a lean too far to the left
+        else if node.balance < -1 { 
+            if node.left.as_ref().unwrap().balance > 0 {
+                let mut left = mem::replace(&mut node.left, None).unwrap();
+                left = Node::rotate_left(left);
+                mem::replace(&mut node.left, Some(left));
+            } 
+            node = Node::rotate_right(node);
+        } 
+
+        let grew = node.balance.abs() > old_balance.abs();
+        (node, grew)
+    }
+    // Rotation Documentation
+    //
+    //    Left         Right
+    //  
+    //       y           x
+    //      / \         / \
+    //     x   C  <->  A   y
+    //    / \             / \
+    //   A   B           B   C
+    //
+    // Balance formulas:
+    //
+    // x_L = B-A
+    // y_L = C-(B+1) if x_L > 0
+    //       C-(A+1) if x_L <= 0
+    //
+    // x_R = (C+1)-A if y_R > 0
+    //     = (B+1)-A if y_R <= 0
+    // y_R = C-B
+    //
+    //
+    // Right rotate transform:
+    //
+    // y_R = y_L + 1       if x_L > 0
+    //     = y_L - x_L + 1 if x_L <= 0
+    // x_R = x_L + y_R + 1 if y_R > 0
+    //     = x_L + 1       if y_R <= 0
+    //
+    // Left rotate transform:
+    //
+    // x_L = x_R - y_R - 1 if y_R > 0
+    //     = x_R - 1       if y_R <= 0
+    // y_L = y_R - 1       if x_L > 0
+    //     = y_R + x_L - 1 if x_L => 0
+    //
+    #[allow(non_snake_case)]
+    fn rotate_right(mut root: Box<Node<K, V>>) -> Box<Node<K, V>> {
+        assert!(root.left.is_some());
+        let mut new_root = mem::replace(&mut root.left, None).unwrap();
+
+        let y_L = root.balance;
+        let x_L = new_root.balance;
+        let y_R = if x_L > 0 { y_L + 1 } else { y_L - x_L + 1 };
+        let x_R = if y_R > 0 { x_L + y_R + 1 } else { x_L + 1 };
+        root.balance = y_R;
+        new_root.balance = x_R;
+
+        let old_right = mem::replace(&mut new_root.right, None);
+        mem::replace(&mut root.left, old_right);
+        mem::replace(&mut new_root.right, Some(root));
+        new_root
+    }
+    #[allow(non_snake_case)]
+    fn rotate_left(mut root: Box<Node<K, V>>) -> Box<Node<K, V>> {
+        assert!(root.right.is_some());
+        let mut new_root = mem::replace(&mut root.right, None).unwrap();
+
+        let x_R = root.balance;
+        let y_R = new_root.balance;
+        let x_L = if y_R > 0 { x_R - y_R - 1 } else { x_R - 1 };
+        let y_L = if x_L > 0 { y_R - 1 } else { y_R + x_L - 1 };
+        root.balance = x_L;
+        new_root.balance = y_L;
+
+        let old_left = mem::replace(&mut new_root.left, None);
+        mem::replace(&mut root.right, old_left);
+        mem::replace(&mut new_root.left, Some(root));
+        new_root
+    }
+
+    fn _check_invariants(&self) -> Result<(), &'static str> {
+        let check = |node: &Self| {
+            if node.balance.abs() > 1 {
+                return Err("Node out of balance");
+            }
+            let left_height = node.left.as_ref()
+                .map_or(0, |n| n.height()) as isize;
+            let right_height = node.right.as_ref()
+                .map_or(0, |n| n.height()) as isize;
+
+            if (right_height - left_height).abs() > 1 {
+                return Err("Node out of balance (height check)");
+            }
+            if node.balance != (right_height - left_height) as i8 {
+                return Err("Balance doesn't match height");
+            }
+            Ok(())
+        };
+
+        self.fold(Ok(()), |b, n| { 
+            match b {
+                Ok(()) => check(&n),
+                Err(_) => b,
+            }
+        })
     }
 
     fn fold<B, F>(&self, init: B, f: F) -> B 
@@ -66,35 +209,32 @@ impl<K: Ord, V> Node<K, V> {
 
         accum
     }
-
-    
     fn len(&self) -> usize {
         self.fold(1, |b, n| { b + n.len() })
     }
-
     fn height(&self) -> usize {
         self.fold(1, |b, n| { cmp::max(b, n.height() + 1) })
     }
-
-    fn find(&self, key: K) -> Option<&V> {
+    fn get(&self, key: K) -> Option<&V> {
         if key == self.key {
             return Some(&self.value);
         }
 
         if key < self.key && self.left.is_some() {
-            return self.left.as_ref().and_then(|n| n.find(key));
+            return self.left.as_ref().and_then(|n| n.get(key));
         }
 
         if key > self.key && self.right.is_some() {
-            return self.right.as_ref().and_then(|n| n.find(key));
+            return self.right.as_ref().and_then(|n| n.get(key));
         }
 
         return None;
     }
+
 }
 
 #[derive(Debug)]
-pub struct Tree<K: Ord, V> {
+pub struct Tree<K: Ord, V: PartialEq> {
     root: Option<Box<Node<K, V>>>,
 }
 
@@ -110,33 +250,38 @@ macro_rules! tree_fn {
     }
 }
 
-impl<K: Ord, V> Tree<K, V> {
+impl<K: Ord, V: PartialEq> Tree<K, V> {
     pub fn new() -> Tree<K, V> {
         Tree { root: None }
     }
     
     pub fn insert(&mut self, key: K, val: V) {
-        Node::insert(&mut self.root, key, val);
+        let mut root = mem::replace(&mut self.root, None);
+        root = Node::insert(root, key, val).0;
+        mem::replace(&mut self.root, root);
     }
 
     tree_fn!(len() -> usize, 0);
-    tree_fn!(find(key: K) -> Option<&V>, None);
+    tree_fn!(height() -> usize, 0);
+    tree_fn!(get(key: K) -> Option<&V>, None);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng;
+    use test::Bencher;
 
     mod node {
         use super::Node;
 
         fn build_tree() -> Node<char, u32> {
-            let mut n = Node::new('b', 1);
-            n.add_child('a', 2);
-            n.add_child('d', 3);
-            n.add_child('c', 4);
-            n.add_child('e', 5);
-            n
+            let mut n = Some(Box::new(Node::new('b', 1)));
+            n = Node::insert(n, 'a', 2).0;
+            n = Node::insert(n, 'd', 3).0;
+            n = Node::insert(n, 'c', 4).0;
+            n = Node::insert(n, 'e', 5).0;
+            *n.unwrap()
         }
 
         #[test]
@@ -178,14 +323,64 @@ mod tests {
         }
         
         #[test]
-        fn find_basic() {
+        fn get_basic() {
             let mut t = Tree::new();
             t.insert("hi", 123);
             t.insert("woo", 124);
             t.insert("moo", 125);
 
-            assert_eq!(125, *t.find("moo").expect("find failed"));
+            assert_eq!(125, *t.get("moo").expect("get failed"));
         }
+
+        #[test]
+        fn insert_replace() {
+            let mut t = Tree::new();
+            t.insert("hi", 123);
+            t.insert("hi", 234);
+            assert_eq!(1, t.len());
+            assert_eq!(234, *t.get("hi").expect("get failed"));
+        }
+    }
+
+    #[bench]
+    fn bench_tree_get_rand(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+        let mut t: Tree<u32, u32> = Tree::new();
+        for x in 1..1000000 {
+            t.insert(rng.gen(), x);
+        }
+        println!("Tree height: {}", t.height());
+        b.iter(|| {
+            let mut out: u32 = 0;
+            for _ in 1..1000 {
+                let k = t.get(rng.gen());
+                if k.is_some() {
+                    out ^= *k.unwrap();
+                }
+            }
+            out
+        });
+    }
+
+    #[bench]
+    fn bench_tree_inorder_insert(b: &mut Bencher) {
+        b.iter(|| {
+            let mut t: Tree<u32, ()> = test::black_box(Tree::new());
+            for x in 1..1000 {
+                t.insert(x, ());
+            }
+        });
+    }
+
+    #[bench]
+    fn bench_tree_rand_insert(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+        b.iter(|| {
+            let mut t: Tree<u32, ()> = test::black_box(Tree::new());
+            for _ in 1..1000 {
+                t.insert(rng.gen(), ());
+            }
+        });
     }
 
 }
