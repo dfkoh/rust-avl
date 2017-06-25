@@ -261,9 +261,90 @@ impl<K: Ord, V: PartialEq> Tree<K, V> {
         mem::replace(&mut self.root, root);
     }
 
+    pub fn iter<'a>(&'a self) -> TreeIter<'a, K, V> {
+        TreeIter { 
+            curr: self.root.as_ref(), 
+            curr_branch: Branch::Start, 
+            stack: Vec::new() 
+        }
+    }
+
     tree_fn!(len() -> usize, 0);
     tree_fn!(height() -> usize, 0);
     tree_fn!(get(key: K) -> Option<&V>, None);
+}
+
+
+// Iterative implementation of tree walk
+//
+// Tree walk recursive function would look like this:
+// (Left)  recurse into left subtree
+// (Yield) yield self
+// (Right) recurse into right subtree
+// (Done)  return
+//
+#[derive(Debug, Clone, Copy)]
+enum Branch {
+    Left,
+    Yield,
+    Right,
+    Done
+}
+
+#[derive(Debug)]
+pub struct TreeIter<'a, K: Ord + 'a, V: PartialEq + 'a>{
+    curr: Option<&'a Box<Node<K, V>>>,
+    curr_branch: Branch,
+    stack: Vec<(&'a Box<Node<K, V>>, Branch)>,
+}
+
+impl<'a, K: Ord, V: PartialEq> Iterator for TreeIter<'a, K, V> {
+    type Item = (&'a K, &'a V);
+
+    fn next(&mut self) -> Option<(&'a K, &'a V)> {
+        loop { match self.curr_branch {
+            Branch::Left => {
+                match self.curr {
+                    None => {
+                        if let Some((new_curr, new_branch)) = self.stack.pop() {
+                            self.curr = Some(new_curr);
+                            self.curr_branch = new_branch;
+                        } else {
+                            return None;
+                        }
+                    },
+                    Some(node) => {
+                        self.curr = node.left.as_ref();
+                        self.curr_branch = Branch::Left;
+
+                        self.stack.push((node, Branch::Yield));
+                    }
+                }
+            },
+            Branch::Yield => {
+                assert!(self.curr.is_some());
+                self.curr_branch = Branch::Right;
+                let n = self.curr.unwrap();
+                return Some((&n.key, &n.value));
+            }
+            Branch::Right => {
+                assert!(self.curr.is_some());
+                let node = self.curr.unwrap();
+                self.curr = node.right.as_ref();
+                self.curr_branch = Branch::Left;
+
+                self.stack.push((node, Branch::Done));
+            }
+            Branch::Done => {
+                if let Some((new_curr, new_branch)) = self.stack.pop() {
+                    self.curr = Some(new_curr);
+                    self.curr_branch = new_branch;
+                } else {
+                    return None;
+                }
+            }
+        }}
+    }
 }
 
 #[cfg(test)]
@@ -320,6 +401,22 @@ mod tests {
             t.insert("woo", 123);
             t.insert("moo", 123);
             assert_eq!(3, t.len());
+        }
+
+        #[test]
+        fn iter_basic() {
+            let mut t = Tree::new();
+            t.insert("hi", 123);
+            t.insert("woo", 123);
+            t.insert("moo", 123);
+            {
+                let mut iter = t.iter();
+                assert_eq!("hi", *iter.next().unwrap().0);
+                assert_eq!("moo", *iter.next().unwrap().0);
+                assert_eq!("woo", *iter.next().unwrap().0);
+                assert_eq!(None, iter.next());
+            }
+            t.insert("check borrow", 123);
         }
         
         #[test]
