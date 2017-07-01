@@ -264,7 +264,7 @@ impl<K: Ord, V: PartialEq> Tree<K, V> {
     pub fn iter<'a>(&'a self) -> TreeIter<'a, K, V> {
         TreeIter { 
             curr: self.root.as_ref(), 
-            curr_branch: Branch::Start, 
+            curr_branch: Branch::Left, 
             stack: Vec::new() 
         }
     }
