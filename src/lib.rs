@@ -77,19 +77,19 @@ impl<K: Ord, V: PartialEq> Node<K, V> {
 
         // Balance a lean too far to the right
         if node.balance > 1 { 
+            assert!(node.right.is_some());
             if node.right.as_ref().unwrap().balance < 0 {
-                let mut right = node.right.take().unwrap();
-                right = Node::rotate_right(right);
-                node.right = Some(right);
+                node.right = Some(
+                    Node::rotate_right(node.right.take().unwrap()));
             } 
             node = Node::rotate_left(node);
         } 
         // Balance a lean too far to the left
         else if node.balance < -1 { 
+            assert!(node.left.is_some());
             if node.left.as_ref().unwrap().balance > 0 {
-                let mut left = node.left.take().unwrap();
-                left = Node::rotate_left(left);
-                node.left = Some(left);
+                node.left = Some(
+                    Node::rotate_left(node.left.take().unwrap()));
             } 
             node = Node::rotate_right(node);
         } 
