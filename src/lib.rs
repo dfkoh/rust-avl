@@ -4,7 +4,6 @@ extern crate test;
 extern crate rand;
 
 use std::cmp;
-use std::mem;
 
 #[derive(Debug)]
 struct Node<K: Ord, V: PartialEq> {
@@ -252,9 +251,7 @@ impl<K: Ord, V: PartialEq> Tree<K, V> {
     }
     
     pub fn insert(&mut self, key: K, val: V) {
-        let mut root = mem::replace(&mut self.root, None);
-        root = Node::insert(root, key, val).0;
-        mem::replace(&mut self.root, root);
+        self.root = Node::insert(self.root.take(), key, val).0;
     }
 
     pub fn iter<'a>(&'a self) -> TreeIter<'a, K, V> {
