@@ -44,17 +44,15 @@ impl<K: Ord, V: PartialEq> Node<K, V> {
                 node.value = val;
             }
             else if key < node.key {
-                let left = mem::replace(&mut node.left, None);
-                let (lnode, lgrew) = Node::insert(left, key, val);
+                let (lnode, lgrew) = Node::insert(node.left.take(), key, val);
                 grew = lgrew;
-                mem::replace(&mut node.left, lnode);
+                node.left = lnode;
                 change = -1;
             } 
             else {
-                let right = mem::replace(&mut node.right, None);
-                let (rnode, rgrew) = Node::insert(right, key, val);
+                let (rnode, rgrew) = Node::insert(node.right.take(), key, val);
                 grew = rgrew;
-                mem::replace(&mut node.right, rnode);
+                node.right = rnode;
                 change = 1;
             }
         }
@@ -80,18 +78,18 @@ impl<K: Ord, V: PartialEq> Node<K, V> {
         // Balance a lean too far to the right
         if node.balance > 1 { 
             if node.right.as_ref().unwrap().balance < 0 {
-                let mut right = mem::replace(&mut node.right, None).unwrap();
+                let mut right = node.right.take().unwrap();
                 right = Node::rotate_right(right);
-                mem::replace(&mut node.right, Some(right));
+                node.right = Some(right);
             } 
             node = Node::rotate_left(node);
         } 
         // Balance a lean too far to the left
         else if node.balance < -1 { 
             if node.left.as_ref().unwrap().balance > 0 {
-                let mut left = mem::replace(&mut node.left, None).unwrap();
+                let mut left = node.left.take().unwrap();
                 left = Node::rotate_left(left);
-                mem::replace(&mut node.left, Some(left));
+                node.left = Some(left);
             } 
             node = Node::rotate_right(node);
         } 
@@ -137,7 +135,7 @@ impl<K: Ord, V: PartialEq> Node<K, V> {
     #[allow(non_snake_case)]
     fn rotate_right(mut root: Box<Node<K, V>>) -> Box<Node<K, V>> {
         assert!(root.left.is_some());
-        let mut new_root = mem::replace(&mut root.left, None).unwrap();
+        let mut new_root = root.left.take().unwrap();
 
         let y_L = root.balance;
         let x_L = new_root.balance;
@@ -146,15 +144,14 @@ impl<K: Ord, V: PartialEq> Node<K, V> {
         root.balance = y_R;
         new_root.balance = x_R;
 
-        let old_right = mem::replace(&mut new_root.right, None);
-        mem::replace(&mut root.left, old_right);
-        mem::replace(&mut new_root.right, Some(root));
+        root.left = new_root.right.take();
+        new_root.right = Some(root);
         new_root
     }
     #[allow(non_snake_case)]
     fn rotate_left(mut root: Box<Node<K, V>>) -> Box<Node<K, V>> {
         assert!(root.right.is_some());
-        let mut new_root = mem::replace(&mut root.right, None).unwrap();
+        let mut new_root = root.right.take().unwrap();
 
         let x_R = root.balance;
         let y_R = new_root.balance;
@@ -163,9 +160,8 @@ impl<K: Ord, V: PartialEq> Node<K, V> {
         root.balance = x_L;
         new_root.balance = y_L;
 
-        let old_left = mem::replace(&mut new_root.left, None);
-        mem::replace(&mut root.right, old_left);
-        mem::replace(&mut new_root.left, Some(root));
+        root.right = new_root.left.take();
+        new_root.left = Some(root);
         new_root
     }
 
@@ -300,7 +296,6 @@ pub struct TreeIter<'a, K: Ord + 'a, V: PartialEq + 'a>{
 
 impl<'a, K: Ord, V: PartialEq> Iterator for TreeIter<'a, K, V> {
     type Item = (&'a K, &'a V);
-
     fn next(&mut self) -> Option<(&'a K, &'a V)> {
         loop { match self.curr_branch {
             Branch::Left => {
